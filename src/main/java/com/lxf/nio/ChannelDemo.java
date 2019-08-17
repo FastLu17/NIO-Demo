@@ -12,9 +12,12 @@ import java.nio.channels.AsynchronousFileChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
+import java.nio.file.*;
 import java.time.LocalTime;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /**
  * Channel 本身不存储数据,需要配合Buffer使用、
@@ -178,7 +181,7 @@ public class ChannelDemo {
     }
 
     /**
-     * 测试 AsyncChannel的使用、TODO: 同时执行两次、第一次成功,第二次失败.不知道为什么。
+     * 测试 AsyncChannel的使用、TODO: 同时执行两次、第一次成功,第二次失败.不知道为什么。--->应该是不支持读写同时异步、
      */
     @Test
     public void method5() throws IOException {
@@ -188,45 +191,87 @@ public class ChannelDemo {
 
         AsynchronousFileChannel asyncOutChannel = AsynchronousFileChannel.open(Paths.get(BASE_PATH, "1.千锋Java教程：14微信支付基础1-copy.mp4"),StandardOpenOption.WRITE,StandardOpenOption.READ,StandardOpenOption.CREATE);
 
-        ByteBuffer buffer = ByteBuffer.allocateDirect((int) asyncChannel.size());//如果使用非直接缓冲区、completed()和failed都不会执行、
+        /*
+        *   1、如果使用read()--CompletionHandler中执行write(),非直接缓冲区、completed()和failed都不会执行、
+        *
+        *   2、如果使用Future方式进行read()后再write(),两种缓冲区都会正常执行、--->官方是利用这种方式进行AIO操作、
+        * */
+        ByteBuffer buffer = ByteBuffer.allocateDirect((int) asyncChannel.size());//设置容量时,需要设置channel.size()、
 
 //        Future<Integer> integerFuture = asyncChannel.read(buffer, 0); 两种异步的方式、
 
-        asyncChannel.read(buffer, 0, buffer, new CompletionHandler<Integer, ByteBuffer>() {
+        // ========start=========利用CompletionHandler方式进行read、
+//        asyncChannel.read(buffer, 0, buffer, new CompletionHandler<Integer, ByteBuffer>() {
+//            @Override
+//            public void completed(Integer result, ByteBuffer attachment) {
+//                System.out.println("read LocalTime.now() = " + LocalTime.now());
+//
+//                attachment.flip();
+////                buffer.flip();
+//                /*
+//                *   TODO: 注意：此处write数据时、不可以使用buffer、需要使用attachment,否则写数据失败、
+//                * */
+////                asyncOutChannel.write(buffer, 0, buffer, new CompletionHandler<Integer, ByteBuffer>() {
+//                asyncOutChannel.write(attachment, 0, attachment, new CompletionHandler<Integer, ByteBuffer>() {
+//                    @Override
+//                    public void completed(Integer result, ByteBuffer attachment) {
+//                        System.out.println("write LocalTime.now() = " + LocalTime.now());
+//                        System.out.println("write completed ");
+//                        attachment.clear();
+//                    }
+//
+//                    @Override
+//                    public void failed(Throwable exc, ByteBuffer attachment) {
+//                        System.out.println("write failed LocalTime.now() = " + LocalTime.now());
+//                    }
+//                });
+//            }
+//
+//            @Override
+//            public void failed(Throwable exc, ByteBuffer attachment) {
+//                System.out.println("read failed LocalTime.now() = " + LocalTime.now());
+//            }
+//        });
+        // ========end=========利用CompletionHandler方式进行read、
+
+        // ========start=========利用Future方式进行read、
+        /*
+        * TODO: 利用Future方式进行read、重复多次执行,都会正常write数据、
+        * */
+        Future<Integer> read = asyncChannel.read(buffer, 0);
+        while (true) {
+            if (read.isDone()) {
+                System.out.println("read LocalTime.now() = " + LocalTime.now());
+                break;
+            }
+        }
+        buffer.flip();
+        asyncOutChannel.write(buffer, 0, buffer, new CompletionHandler<Integer, ByteBuffer>() {
             @Override
             public void completed(Integer result, ByteBuffer attachment) {
-                System.out.println("read LocalTime.now() = " + LocalTime.now());
-
-                attachment.flip();
-//                buffer.flip();
-                /*
-                *   TODO: 注意：此处write数据时、不可以使用buffer、需要使用attachment,否则写数据失败、
-                * */
-//                asyncOutChannel.write(buffer, 0, buffer, new CompletionHandler<Integer, ByteBuffer>() {
-                asyncOutChannel.write(attachment, 0, attachment, new CompletionHandler<Integer, ByteBuffer>() {
-                    @Override
-                    public void completed(Integer result, ByteBuffer attachment) {
-                        System.out.println("write LocalTime.now() = " + LocalTime.now());
-                        System.out.println("write completed ");
-                        attachment.clear();
-                    }
-
-                    @Override
-                    public void failed(Throwable exc, ByteBuffer attachment) {
-                        System.out.println("write failed LocalTime.now() = " + LocalTime.now());
-                    }
-                });
+                System.out.println("write LocalTime.now() = " + LocalTime.now());
+                System.out.println("write completed ");
+                attachment.clear();
             }
 
             @Override
             public void failed(Throwable exc, ByteBuffer attachment) {
-                System.out.println("read failed LocalTime.now() = " + LocalTime.now());
+                System.out.println("write failed LocalTime.now() = " + LocalTime.now());
             }
         });
+        // ========end=========利用Future方式进行read、
+
 
         System.out.println("main LocalTime.now() = " + LocalTime.now());
         asyncChannel.close();
         asyncOutChannel.close();
+    }
+
+    @Test
+    public void copyFile() throws IOException {
+        //Copy文件,使用这个比AsyncFileChannel更简单好用、效率没有测试过、
+        String BASE_PATH = "D:\\Java视频\\千锋Java教程：微信支付\\1-7\\1.千锋Java教程：14微信支付基础1.mp4";
+        Files.copy(Paths.get(BASE_PATH), Paths.get("D:\\Java视频\\千锋Java教程：微信支付\\1-7\\1.千锋Java教程：14微信支付基础1111.mp4"), StandardCopyOption.REPLACE_EXISTING);
     }
 
 }
