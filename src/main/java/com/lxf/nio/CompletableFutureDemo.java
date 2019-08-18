@@ -33,6 +33,7 @@ public class CompletableFutureDemo {
         return rand.nextInt(1000);
     }
 
+    //main方法中,线程池不会自动结束、但是在@Test方法下,线程池会自动结束、
     public static void main(String[] args) throws Exception {
         CompletableFuture<Integer> future = CompletableFuture.supplyAsync(CompletableFutureDemo::getMoreData);
 
@@ -42,6 +43,15 @@ public class CompletableFutureDemo {
         ExecutorService pool = Executors.newCachedThreadPool();
         pool.execute(() -> future.whenComplete((v, e) -> {
             if (e == null) {
+                try {
+                    FileChannel channel = FileChannel.open(Paths.get("C:\\Users\\Administrator\\Desktop\\NIO\\async.txt"), StandardOpenOption.WRITE, StandardOpenOption.CREATE);
+                    ByteBuffer buffer = ByteBuffer.wrap("Hello".getBytes());
+                    channel.write(buffer);
+                    channel.close();
+                } catch (IOException e1) {
+                    e1.printStackTrace();
+                }
+
                 System.out.println("v = " + v);//这里可以对getMoreData()的返回值进行相关的业务操作、
                 pool.shutdown();//TODO: 不需要主动关闭线程池、
             } else {
@@ -90,20 +100,23 @@ public class CompletableFutureDemo {
             }
             return "AAA";
         });
-        supplyAsync.whenCompleteAsync((s, throwable) -> {
-            if (throwable == null) {
-                try {
-                    FileChannel channel = FileChannel.open(Paths.get("C:\\Users\\Administrator\\Desktop\\NIO\\async.txt"), StandardOpenOption.WRITE, StandardOpenOption.CREATE);
-                    ByteBuffer buffer = ByteBuffer.wrap("Hello".getBytes());
-                    channel.write(buffer);
-                    channel.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
+        //线程池在@Test方法下,会自动执行shutdown()方法、
+        Executors.newCachedThreadPool().execute(()->{
+            supplyAsync.whenCompleteAsync((s, throwable) -> {
+                if (throwable == null) {
+                    try {
+                        FileChannel channel = FileChannel.open(Paths.get("C:\\Users\\Administrator\\Desktop\\NIO\\async.txt"), StandardOpenOption.WRITE, StandardOpenOption.CREATE);
+                        ByteBuffer buffer = ByteBuffer.wrap("Hello".getBytes());
+                        channel.write(buffer);
+                        channel.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
-            }
+            });
         });
 
-        //TODO: 如果不暂停一段时间,主线程直接结束,  异步任务不能正常完成、  为什么？？？
+        //TODO: 如果不暂停一段时间,主线程直接结束,  异步任务不能正常完成、  为什么？？？-->线程池shutdown了？
 //        Thread.sleep(5000);
     }
 
