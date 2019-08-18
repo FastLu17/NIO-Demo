@@ -2,6 +2,11 @@ package com.lxf.nio;
 
 import org.junit.Test;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -65,6 +70,42 @@ public class CompletableFutureDemo {
 
     }
 
+
+    @Test
+    public void processFuture() throws InterruptedException {
+        /*
+        *   TODO: 不可以使用线程池的方式来获取CompletableFuture对象、  Future对象是顶级父类、会出现ClassCastException
+        * */
+//        Future<String> stringFuture = Executors.newCachedThreadPool().submit(() -> {
+//            TimeUnit.SECONDS.sleep(3);
+//            return "AAA";
+//        });
+//        CompletableFuture<String> completableFuture = (CompletableFuture<String>) supplyAsync; // ClassCastException
+
+        CompletableFuture<String> supplyAsync = CompletableFuture.supplyAsync(() -> {
+            try {
+                TimeUnit.SECONDS.sleep(3);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            return "AAA";
+        });
+        supplyAsync.whenCompleteAsync((s, throwable) -> {
+            if (throwable == null) {
+                try {
+                    FileChannel channel = FileChannel.open(Paths.get("C:\\Users\\Administrator\\Desktop\\NIO\\async.txt"), StandardOpenOption.WRITE, StandardOpenOption.CREATE);
+                    ByteBuffer buffer = ByteBuffer.wrap("Hello".getBytes());
+                    channel.write(buffer);
+                    channel.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+
+        //TODO: 如果不暂停一段时间,主线程直接结束,  异步任务不能正常完成、  为什么？？？
+//        Thread.sleep(5000);
+    }
 
     /**
      * 监听当前CompletableFuture对象是否计算完成、(监听异步任务是否完成)
