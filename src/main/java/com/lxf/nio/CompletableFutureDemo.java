@@ -35,12 +35,13 @@ public class CompletableFutureDemo {
 
     //main方法中,线程池不会自动结束、但是在@Test方法下,线程池会自动结束、
     public static void main(String[] args) throws Exception {
-        CompletableFuture<Integer> future = CompletableFuture.supplyAsync(CompletableFutureDemo::getMoreData);
-
         /**
          *  TODO: 这样使用、整个main线程不会结束、为什么？--->线程池未关闭、
          */
         ExecutorService pool = Executors.newCachedThreadPool();
+
+        CompletableFuture<Integer> future = CompletableFuture.supplyAsync(CompletableFutureDemo::getMoreData, pool);
+
         pool.execute(() -> future.whenComplete((v, e) -> {
             if (e == null) {
                 try {
@@ -60,7 +61,7 @@ public class CompletableFutureDemo {
         }));
 
         /**
-         *  TODO: 这样使用,main会结束、而且看不到异步输出的结果。
+         *  TODO: 这样使用,main会结束、而且看不到异步输出的结果。  -->是否是获取CompletableFuture对象时,需要指定线程池、
          */
 //        future.whenCompleteAsync((integer, throwable) -> {//是执行把 whenCompleteAsync 这个任务继续提交给线程池来进行执行。;
 //            if (throwable == null)
@@ -84,8 +85,8 @@ public class CompletableFutureDemo {
     @Test
     public void processFuture() throws InterruptedException {
         /*
-        *   TODO: 不可以使用线程池的方式来获取CompletableFuture对象、  Future对象是顶级父类、会出现ClassCastException
-        * */
+         *   TODO: 不可以使用线程池的方式来获取CompletableFuture对象、  Future对象是顶级父类、会出现ClassCastException
+         * */
 //        Future<String> stringFuture = Executors.newCachedThreadPool().submit(() -> {
 //            TimeUnit.SECONDS.sleep(3);
 //            return "AAA";
@@ -101,7 +102,7 @@ public class CompletableFutureDemo {
             return "AAA";
         });
         //线程池在@Test方法下,会自动执行shutdown()方法、
-        Executors.newCachedThreadPool().execute(()->{
+        Executors.newCachedThreadPool().execute(() -> {
             supplyAsync.whenCompleteAsync((s, throwable) -> {
                 if (throwable == null) {
                     try {
