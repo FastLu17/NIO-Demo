@@ -38,20 +38,30 @@ public class CompletionServiceDemo {
         }
         // 4、获取数据
         try {
-            for (int taskCount = 0; taskCount < strList.size(); taskCount++) {
-                /*
-                 *   CompletionService的两个方法：
-                 *       take()：阻塞、
-                 *       poll()：非阻塞、
-                 * */
-                System.out.println("future result async: " + completionService.take().get());
-            }
-            System.out.println("totalTime = " + (System.currentTimeMillis() - start));
-        } catch (InterruptedException | ExecutionException e) {
+            executor.execute(()->{
+                for (int taskCount = 0; taskCount < strList.size(); taskCount++) {
+                    /*
+                     *   CompletionService的两个方法：
+                     *       take()：阻塞、
+                     *       poll()：非阻塞、
+                     * */
+                    try {
+                        System.out.println("future result async: " + completionService.take().get());
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    } catch (ExecutionException e) {
+                        e.printStackTrace();
+                    }
+                }
+                System.out.println("totalTime = " + (System.currentTimeMillis() - start));
+            });
+        } catch (Exception e) {
             e.printStackTrace();
         } finally {
             // 5、关闭线程池
             try {
+                System.out.println("main线程-准备结束" );
+                UNIT.sleep(10000);
                 executor.shutdownNow();
                 executor.awaitTermination(TIMEOUT, UNIT);
             } catch (InterruptedException e) {
