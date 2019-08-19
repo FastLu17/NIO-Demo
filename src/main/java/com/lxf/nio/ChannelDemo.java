@@ -14,10 +14,8 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.LocalTime;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Channel 本身不存储数据,需要配合Buffer使用、
@@ -181,7 +179,7 @@ public class ChannelDemo {
     }
 
     /**
-     * 测试 AsyncChannel的使用、TODO: 同时执行两次、第一次成功,第二次失败.不知道为什么。--->应该是不支持读写同时异步、
+     * 测试 AsyncChannel的使用、TODO: 同时执行两次、第一次成功,第二次失败.不知道为什么。--->已解决: SpringBoot项目中是正常的、
      */
     @Test
     public void method5() throws IOException {
@@ -189,13 +187,14 @@ public class ChannelDemo {
         String BASE_PATH = "D:\\Java视频\\千锋Java教程：微信支付\\1-7\\";
         AsynchronousFileChannel asyncChannel = AsynchronousFileChannel.open(Paths.get(BASE_PATH, "1.千锋Java教程：14微信支付基础1.mp4"));
 
-        AsynchronousFileChannel asyncOutChannel = AsynchronousFileChannel.open(Paths.get(BASE_PATH, "1.千锋Java教程：14微信支付基础1-copy.mp4"),StandardOpenOption.WRITE,StandardOpenOption.READ,StandardOpenOption.CREATE);
+        AsynchronousFileChannel asyncOutChannel = AsynchronousFileChannel.open(Paths.get(BASE_PATH, "1.千锋Java教程：14微信支付基础1-copy.mp4"), StandardOpenOption.WRITE, StandardOpenOption.READ, StandardOpenOption.CREATE);
 
+        //已解决: SpringBoot项目中两种缓冲区都可以正常使用、
         /*
-        *   1、如果使用read()--CompletionHandler中执行write(),非直接缓冲区、completed()和failed都不会执行、
-        *
-        *   2、如果使用Future方式进行read()后再write(),两种缓冲区都会正常执行、--->官方是利用这种方式进行AIO操作、
-        * */
+         *   1、如果使用read()--CompletionHandler中执行write(),非直接缓冲区、completed()和failed都不会执行、--->已解决: SpringBoot项目,都正常、
+         *
+         *   2、如果使用Future方式进行read()后再write(),两种缓冲区都会正常执行、--->官方是利用这种方式进行AIO操作、
+         * */
         ByteBuffer buffer = ByteBuffer.allocateDirect((int) asyncChannel.size());//设置容量时,需要设置channel.size()、
 
 //        Future<Integer> integerFuture = asyncChannel.read(buffer, 0); 两种异步的方式、
@@ -209,7 +208,7 @@ public class ChannelDemo {
 //                attachment.flip();
 ////                buffer.flip();
 //                /*
-//                *   TODO: 注意：此处write数据时、不可以使用buffer、需要使用attachment,否则写数据失败、
+//                *   TODO: 注意：此处write数据时、不可以使用buffer、需要使用attachment,否则写数据失败、--->已解决: SpringBoot项目中都是正常的、
 //                * */
 ////                asyncOutChannel.write(buffer, 0, buffer, new CompletionHandler<Integer, ByteBuffer>() {
 //                asyncOutChannel.write(attachment, 0, attachment, new CompletionHandler<Integer, ByteBuffer>() {
@@ -236,8 +235,8 @@ public class ChannelDemo {
 
         // ========start=========利用Future方式进行read、
         /*
-        * TODO: 利用Future方式进行read、重复多次执行,都会正常write数据、
-        * */
+         * TODO: 利用Future方式进行read、重复多次执行,都会正常write数据、
+         * */
         Future<Integer> read = asyncChannel.read(buffer, 0);
         while (true) {
             if (read.isDone()) {
@@ -265,6 +264,14 @@ public class ChannelDemo {
         System.out.println("main LocalTime.now() = " + LocalTime.now());
         asyncChannel.close();
         asyncOutChannel.close();
+
+        //不在SpringBoot项目,需要阻止main线程结束、
+        try {
+            TimeUnit.SECONDS.sleep(10);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
     }
 
     @Test
@@ -272,6 +279,90 @@ public class ChannelDemo {
         //Copy文件,使用这个比AsyncFileChannel更简单好用、效率没有测试过、
         String BASE_PATH = "D:\\Java视频\\千锋Java教程：微信支付\\1-7\\1.千锋Java教程：14微信支付基础1.mp4";
         Files.copy(Paths.get(BASE_PATH), Paths.get("D:\\Java视频\\千锋Java教程：微信支付\\1-7\\1.千锋Java教程：14微信支付基础1111.mp4"), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+
+    static final String BASE_PATH = "F:\\8天微信小程序，从入门到项目实战\\8天微信小程序第2课\\";
+
+    //    @GetMapping("asyncRead")
+    @Test
+    public void asyncRead() {
+        Path path = Paths.get(BASE_PATH, "微信小程序第二节课.mp4");
+        Path outPath = Paths.get(BASE_PATH, "微信小程序第二节课-copy.mp4");
+
+        AsynchronousFileChannel inChannel = null;
+        AsynchronousFileChannel outChannel;
+        ByteBuffer byteBuffer;
+        try {
+            inChannel = AsynchronousFileChannel.open(path, StandardOpenOption.READ);
+            outChannel = AsynchronousFileChannel.open(outPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+
+            //直接缓冲区和非直接缓冲区均可正常使用
+            byteBuffer = ByteBuffer.allocate((int) inChannel.size());//此处的capacity需要与inChannel的size()相同、因为无法进行循环读取、
+            ByteBuffer finalByteBuffer = byteBuffer;
+            AsynchronousFileChannel finalOutChannel = outChannel;
+            inChannel.read(byteBuffer, 0, byteBuffer, new CompletionHandler<Integer, ByteBuffer>() {
+
+                @Override
+                public void completed(Integer result, ByteBuffer attachment) {
+                    System.out.println("read attachment.limit() = " + attachment.limit());
+                    System.out.println("read completed = " + result);
+                    //如果read的第三个参数,传递的是byteBuffer,则asyncWrite()可以使用attachment、否则就使用byteBuffer、
+                    asyncWrite(finalOutChannel, finalByteBuffer);
+                }
+
+                @Override
+                public void failed(Throwable exc, ByteBuffer attachment) {
+                    System.out.println("read failed = " + exc);
+                }
+
+            });
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                if (inChannel != null) {
+                    inChannel.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        //@Test中需要阻止main线程结束太快-->(程序结束)、否则异步任务就会停止、
+        try {
+            TimeUnit.SECONDS.sleep(15);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    private void asyncWrite(AsynchronousFileChannel outChannel, ByteBuffer byteBuffer) {
+        if (outChannel == null) {
+            throw new RuntimeException("outChannel 不可为null");
+        }
+        byteBuffer.flip();
+        outChannel.write(byteBuffer, 0, byteBuffer, new CompletionHandler<Integer, ByteBuffer>() {
+
+            @Override
+            public void completed(Integer result, ByteBuffer attachment) {
+                System.out.println("write attachment.limit() = " + attachment.limit());
+                System.out.println("write completed = " + result);
+            }
+
+            @Override
+            public void failed(Throwable exc, ByteBuffer attachment) {
+                System.out.println("write failed = " + exc);
+            }
+
+        });
+
+        try {
+            outChannel.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
 }
